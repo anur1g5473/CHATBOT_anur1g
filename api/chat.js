@@ -5,25 +5,42 @@ export const config = {
 
 // This is the main function that runs when you call the API
 export default async function handler(request) {
-  // 1. Get the data from the frontend (the user's question)
-  // We expect a JSON object like: { "prompt": "Hello" }
-  const requestBody = await request.json();
-  const userPrompt = requestBody.prompt;
-
-  // 2. Get the *secret* API key from Vercel's environment variables
-  const GEMINI_KEY = process.env.GEMINI_API_KEY;
-
-  // 3. Prepare the data to send to Google
-  const dataForGoogle = {
-    contents: [
-      {
-        parts: [{ text: userPrompt }],
-      },
-    ],
-  };
-
   try {
-    // 4. Send the request to the Google Gemini API
+    // 1. Get the new, more complex data from the frontend
+    const requestBody = await request.json();
+    const userPrompt = requestBody.prompt;
+    const chatHistory = requestBody.history || []; // Expects an array: [{ role: 'user', text: '...' }, { role: 'bot', text: '...' }]
+    const boundary = requestBody.boundary;       // A simple string
+
+    // 2. Get the *secret* API key from Vercel
+    const GEMINI_KEY = process.env.GEMINI_API_KEY;
+
+    // 3. Format the chat history for the Google API
+    // Google expects "user" and "model" roles
+    const contents = chatHistory.map(turn => ({
+      role: turn.role === 'bot' ? 'model' : 'user', // Convert our 'bot' role to 'model'
+      parts: [{ text: turn.text }]
+    }));
+
+    // 4. Add the new user prompt to the end of the history
+    contents.push({
+      role: 'user',
+      parts: [{ text: userPrompt }]
+    });
+
+    // 5. Prepare the final data object to send to Google
+    const dataForGoogle = {
+      contents: contents,
+    };
+
+    // 6. Add the system prompt (boundary) *if* it was provided
+    if (boundary) {
+      dataForGoogle.systemInstruction = {
+        parts: [{ text: boundary }]
+      };
+    }
+
+    // 7. Send the request to the Google Gemini API
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_KEY}`,
       {
@@ -36,24 +53,30 @@ export default async function handler(request) {
     );
 
     if (!response.ok) {
-      // If Google gives an error, send it back to our frontend
-      const error = await response.text();
-      return new Response(JSON.stringify({ error: error }), { status: 500 });
+      // If Google gives an error, send a clean error message back
+      const errorData = await response.json();
+      const errorMessage = errorData.error ? errorData.error.message : "Error from Google API";
+      return new Response(JSON.stringify({ error: errorMessage }), { status: response.status });
     }
 
     const responseData = await response.json();
 
-    // 5. Extract the AI's reply from the full response
+    // 8. Extract the AI's reply
+    // Added a check in case the AI gives no response (e.g., safety block)
+    if (!responseData.candidates || responseData.candidates.length === 0) {
+      return new Response(JSON.stringify({ error: "No response from AI (content may be blocked)." }), { status: 500 });
+    }
+    
     const aiReply = responseData.candidates[0].content.parts[0].text;
 
-    // 6. Send the clean reply back to our frontend
+    // 9. Send the clean reply back to our frontend
     return new Response(JSON.stringify({ reply: aiReply }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
 
   } catch (error) {
-    // Catch any other errors (like network issues)
+    // Catch any other errors
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 }

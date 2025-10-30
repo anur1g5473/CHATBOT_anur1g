@@ -15,11 +15,23 @@
         #chat-form { display: flex; }
         #chat-input { flex-grow: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
         #send-btn { padding: 10px 15px; margin-left: 10px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        
+        /* New styles for the boundary box */
+        #boundary-controls { margin-bottom: 15px; }
+        #boundary-controls textarea { width: 96%; box-sizing: border-box; height: 60px; padding: 5px; font-size: 0.9em; border-radius: 4px; border: 1px solid #ccc; }
+        #clear-btn { background: #6c757d; color: white; padding: 5px 10px; border: none; border-radius: 4px; cursor: pointer; float: right; font-size: 0.8em; }
     </style>
 </head>
 <body>
     <div id="chat-container">
         <h3>My AI Engine Test</h3>
+        
+        <div id="boundary-controls">
+            <label for="prompt-boundary"><b>Prompt Boundary (System Prompt):</b></label>
+            <button id="clear-btn" title="Clear chat history">Clear Chat</button>
+            <textarea id="prompt-boundary" placeholder="e.g., You are a helpful assistant. You only speak in rhymes."></textarea>
+        </div>
+        
         <div id="chat-window"></div>
         <form id="chat-form">
             <input type="text" id="chat-input" placeholder="Ask anything..." autocomplete="off">
@@ -31,51 +43,88 @@
         const chatForm = document.getElementById('chat-form');
         const chatInput = document.getElementById('chat-input');
         const chatWindow = document.getElementById('chat-window');
+        
+        // New elements
+        const boundaryInput = document.getElementById('prompt-boundary');
+        const clearButton = document.getElementById('clear-btn');
 
+        // This array will store the whole conversation
+        let chatHistory = [];
+
+        // --- Event Listener for the "Send" button ---
         chatForm.addEventListener('submit', async (e) => {
             e.preventDefault(); // Stop the page from reloading
             
             const userMessage = chatInput.value.trim();
             if (!userMessage) return; // Don't send empty messages
 
+            // Get the boundary text
+            const boundaryText = boundaryInput.value.trim();
+
             // 1. Display the user's message
             addMessage(userMessage, 'user');
+
+            // 2. Add user message to our history array
+            chatHistory.push({ role: 'user', text: userMessage });
             
-            // 2. Display a "loading" message
+            // 3. Display a "loading" message
             const loadingEl = addMessage('...', 'loading');
 
-            // 3. Clear the input box
+            // 4. Clear the input box
             chatInput.value = '';
 
             try {
-                // 4. Send the message to our backend "Engine" (api/chat.js)
+                // 5. Send the *new* payload to our backend
                 const response = await fetch('/api/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt: userMessage })
+                    body: JSON.stringify({ 
+                        prompt: userMessage,    // Send the most recent prompt
+                        history: chatHistory,   // Send the whole history
+                        boundary: boundaryText  // Send the system prompt
+                    })
                 });
 
                 const data = await response.json();
 
                 if (response.ok) {
-                    // 5. Success! Show the AI's reply
-                    loadingEl.textContent = data.reply;
+                    // 6. Success! Get the reply
+                    const botReply = data.reply;
+                    
+                    // 7. Update the "loading" message with the real reply
+                    loadingEl.textContent = botReply;
                     loadingEl.classList.remove('loading');
                     loadingEl.classList.add('bot');
+                    
+                    // 8. Add the bot's reply to our history array
+                    chatHistory.push({ role: 'bot', text: botReply });
+
                 } else {
-                    // 6. Handle errors from our backend
+                    // 9. Handle errors from our backend
                     loadingEl.textContent = `Error: ${data.error}`;
                     loadingEl.classList.remove('loading');
                     loadingEl.classList.add('bot');
+                    
+                    // 10. If the API call failed, remove the user's last message from history
+                    // so they can try sending it again.
+                    chatHistory.pop();
                 }
 
             } catch (error) {
-                // 7. Handle network errors
+                // 11. Handle network errors
                 loadingEl.textContent = 'Error: Could not connect to API.';
                 loadingEl.classList.remove('loading');
                 loadingEl.classList.add('bot');
+                chatHistory.pop(); // Also remove user message on network error
             }
         });
+
+        // --- Event Listener for the new "Clear Chat" button ---
+        clearButton.addEventListener('click', () => {
+            chatHistory = []; // Reset the history array
+            chatWindow.innerHTML = ''; // Clear the chat window display
+        });
+
 
         function addMessage(message, type) {
             const messageEl = document.createElement('div');
