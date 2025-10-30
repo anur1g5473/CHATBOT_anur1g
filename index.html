@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot Test</title>
+    <style>
+        body { font-family: sans-serif; display: grid; place-items: center; min-height: 90vh; background: #f4f4f4; }
+        #chat-container { width: 500px; border: 1px solid #ccc; background: #fff; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        #chat-window { height: 400px; overflow-y: scroll; border: 1px solid #eee; padding: 10px; margin-bottom: 20px; }
+        #chat-window div { margin-bottom: 10px; padding: 8px; border-radius: 4px; }
+        .user { background: #e1f5fe; text-align: right; }
+        .bot { background: #f1f1f1; }
+        .loading { background: #f1f1f1; color: #777; font-style: italic; }
+        #chat-form { display: flex; }
+        #chat-input { flex-grow: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        #send-btn { padding: 10px 15px; margin-left: 10px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div id="chat-container">
+        <h3>My AI Engine Test</h3>
+        <div id="chat-window"></div>
+        <form id="chat-form">
+            <input type="text" id="chat-input" placeholder="Ask anything..." autocomplete="off">
+            <button id="send-btn" type="submit">Send</button>
+        </form>
+    </div>
+
+    <script>
+        const chatForm = document.getElementById('chat-form');
+        const chatInput = document.getElementById('chat-input');
+        const chatWindow = document.getElementById('chat-window');
+
+        chatForm.addEventListener('submit', async (e) => {
+            e.preventDefault(); // Stop the page from reloading
+            
+            const userMessage = chatInput.value.trim();
+            if (!userMessage) return; // Don't send empty messages
+
+            // 1. Display the user's message
+            addMessage(userMessage, 'user');
+            
+            // 2. Display a "loading" message
+            const loadingEl = addMessage('...', 'loading');
+
+            // 3. Clear the input box
+            chatInput.value = '';
+
+            try {
+                // 4. Send the message to our backend "Engine" (api/chat.js)
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: userMessage })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // 5. Success! Show the AI's reply
+                    loadingEl.textContent = data.reply;
+                    loadingEl.classList.remove('loading');
+                    loadingEl.classList.add('bot');
+                } else {
+                    // 6. Handle errors from our backend
+                    loadingEl.textContent = `Error: ${data.error}`;
+                    loadingEl.classList.remove('loading');
+                    loadingEl.classList.add('bot');
+                }
+
+            } catch (error) {
+                // 7. Handle network errors
+                loadingEl.textContent = 'Error: Could not connect to API.';
+                loadingEl.classList.remove('loading');
+                loadingEl.classList.add('bot');
+            }
+        });
+
+        function addMessage(message, type) {
+            const messageEl = document.createElement('div');
+            messageEl.textContent = message;
+            messageEl.className = type; // 'user' or 'bot' or 'loading'
+            chatWindow.appendChild(messageEl);
+            chatWindow.scrollTop = chatWindow.scrollHeight; // Auto-scroll to bottom
+            return messageEl;
+        }
+    </script>
+</body>
+</html>
