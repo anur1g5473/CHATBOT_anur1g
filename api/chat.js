@@ -42,7 +42,9 @@ export default async function handler(request) {
 
     // 7. Send the request to the Google Gemini API
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_KEY}`,
+      // --- THIS IS THE CORRECTED LINE ---
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`,
+      // ----------------------------------
       {
         method: 'POST',
         headers: {
